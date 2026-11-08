@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Course Studio — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f5f8;--panel:#fff;--ink:#1a1d24;--mut:#5b6270;--line:#e3e7ee;--side:#15171d;--acc:#2f6fed;--ok:#12b886;--bad:#ef476f}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1116;--panel:#1a1d26;--ink:#eef0f6;--mut:#9aa2b1;--line:#2b303c}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.5 Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+h1,h2,h3{font-family:Poppins,sans-serif;margin:0}
+#app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+nav{background:var(--side);color:#cfd4e0;padding:16px 10px;position:sticky;top:0;height:100vh;overflow:auto}
+nav h1{font-size:16px;color:#fff;padding:4px 10px 14px}nav button{display:block;width:100%;text-align:left;background:none;border:0;color:inherit;padding:9px 12px;border-radius:9px;font:500 13.5px Inter;cursor:pointer}
+nav button:hover{background:#252934}nav button.on{background:var(--acc);color:#fff}nav hr{border:0;border-top:1px solid #2b303c;margin:10px 0}
+main{padding:0 26px 60px;max-width:1100px;width:100%}
+header{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;gap:10px;align-items:center;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:18px}
+header h2{flex:1;font-size:20px}.chip{font-size:12px;padding:4px 10px;border-radius:99px;background:var(--line)}.chip.dirty{background:#ffe8cc;color:#9a4b00}
+button.b{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px;border-radius:9px;font:600 13px Inter;cursor:pointer}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff}button.d{color:var(--bad)}button.b:hover{filter:brightness(.96)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+label{display:block;font-weight:600;font-size:12.5px;margin:12px 0 4px;color:var(--mut)}
+input[type=text],input[type=number],input[type=password],textarea,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit}
+textarea{min-height:70px;resize:vertical}textarea.code{font:12px/1.45 ui-monospace,Menlo,monospace;min-height:340px}
+input[type=color]{width:46px;height:34px;border:1px solid var(--line);border-radius:8px;padding:2px;background:none}
+details{border:1px solid var(--line);border-radius:12px;margin:8px 0;background:var(--panel)}summary{cursor:pointer;padding:10px 14px;font-weight:600;display:flex;gap:8px;align-items:center}
+summary span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.in{padding:0 14px 14px;border-top:1px solid var(--line)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row>*{flex:1;min-width:140px}.chk{display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600}.chk input{width:auto}
+.mini{padding:3px 8px!important;font-size:12px!important;min-width:0!important;flex:none!important}
+.hint{color:var(--mut);font-size:12.5px;margin:4px 0}.log{font:12px ui-monospace,monospace;white-space:pre-wrap;background:var(--bg);border-radius:9px;padding:10px;max-height:220px;overflow:auto}
+.warn{color:#9a4b00}.ok{color:var(--ok)}#pv{width:100%;height:78vh;border:1px solid var(--line);border-radius:12px;background:#fff}
+@media(max-width:800px){#app{grid-template-columns:1fr}nav{position:static;height:auto;display:flex;flex-wrap:wrap}nav button{width:auto}nav hr{display:none}}
+</style></head><body>
+<div id="app"><nav id="nav"></nav><main><header><h2 id="ttl"></h2><span class="chip" id="st">Not connected</span><button class="b" id="bpv">👁 Preview</button><button class="b p" id="bpub">⬆ Publish</button></header><div id="view"></div></main></div>
+<script>
+/* ===== state ===== */
+const $=(s,r=document)=>r.querySelector(s),E=(t,a={},h='')=>{const e=document.createElement(t);Object.assign(e,a);if(h)e.innerHTML=h;return e};
+let src='',sha='',D={},dirty=false,cur='site',LS=JSON.parse(localStorage.getItem('cs_gh')||'{}');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function mark(v=true){dirty=v;const s=$('#st');s.textContent=src?(v?'● Unpublished changes':'Up to date'):'Not connected';s.className='chip'+(v?' dirty':'')}
+/* ===== field specs: [key,label,type,extra] ===== */
+const PAIR=['term','def'];
+const DAY=[['type','Type','s',['lesson','project','practice']],['title','Card title'],['front','Front of card','a'],['idea','Back: big idea (**bold**, lines starting "- " = bullets)','a'],['vocab','Vocabulary — one per line: term | definition','pairs',PAIR],['links','Links — one per line: kind | ref | label (kind = screencast, note, project, url)','pairs',['kind','ref','label']]];
+const SPEC={
+weeks:[['n','Week number','n'],['title','Title (e.g. Week 6 — Retouching)'],['short','Short name'],['days','Days','sub',DAY,d=>d.title||'New day',()=>({type:'lesson',title:'',front:'',idea:'',vocab:[],links:[]})]],
+items:[['id','Google Drive file ID'],['title','Title'],['desc','Description','a'],['order','Order','n'],['group','Group id'],['phase','Phase','n'],['released','Released to students','b'],['graded','Graded','b'],['vocab','Vocabulary — term | definition','pairs',PAIR]],
+groups:[['id','Group id'],['title','Title'],['sub','Subtitle'],['color','Colour','c'],['badge','Badge text']],
+notes:[['id','Note id (e.g. readme-week6)'],['week','Week','n'],['badge','Badge (e.g. WEEK 6)'],['title','Title'],['intro','Intro','a'],['quiz','Has quiz + Mark as Read','b'],['hidden','Hide this note','b'],['tip','Tip box','a'],['cards','Cards','sub',[['title','Card title'],['text','Text','a']],c=>c.title||'New card',()=>({title:'',text:''})],['vocab','Vocabulary — term | definition','pairs',PAIR]],
+quizzes:[['type','Type','s',['reading','video']],['key','Key (Read Me note id, or screencast id)'],['questions','Questions (need 5+, students get 5 random)','sub',[['q','Question','a'],['options','Options — one per line','lines'],['answer','Correct option number (0 = first line)','n']],q=>q.q||'New question',()=>({q:'',options:['','','',''],answer:0})]],
+projects:[['id','Project id'],['week','Week','n'],['title','Title'],['desc','Brief','a'],['skills','Skills (comma separated)','csv'],['checks','Checklist — one per line','lines'],['classroomUrl','Classroom / submission link'],['section','Section (e.g. Phase One)'],['marks','Marks','n'],['hidden','Hide project','b']],
+files:[['id','Google Drive file ID'],['label','Label']]};
+const SECT={
+site:{t:'🏠 Home & brand text',f:()=>[[D.site,[['brandName','Brand name'],['brandSub','Brand subtitle'],['heroEyebrow','Small line above heading'],['heroTitle','Home heading'],['heroText','Home paragraph','a'],['stats','Home boxes (up to 4) — number | label','pairs',['num','label']],['tabs','Rename tabs — one per line: key = name (curriculum, projects, notes, screencasts, practice, materials, assessment, progress)','map']]]]},
+weeks:{t:'📅 Curriculum weeks',l:'weeks',a:'Import built-in week…',mk:()=>({n:'',title:'',short:'',days:[]}),ti:w=>'Week '+w.n+' — '+(w.title||''),imp:1},
+items:{t:'🎬 Screencasts',l:'items',mk:()=>({id:'',title:'',desc:'',released:true,graded:false,phase:1,vocab:[]}),ti:x=>x.title||x.id||'New screencast',sw:'released'},
+groups:{t:'🗂 Screencast groups',l:'groups',mk:()=>({id:'',title:'',sub:'',color:'#2f6fed'}),ti:x=>x.title||'New group'},
+notes:{t:'📖 Read Me notes',l:'notes',mk:()=>({id:'',week:'',cards:[],vocab:[],quiz:true}),ti:x=>(x.badge||'')+' '+(x.title||x.id||'New note'),sw:'hidden'},
+quizzes:{t:'🧠 Assessment quizzes',l:'quizzes',mk:()=>({type:'reading',key:'',questions:[]}),ti:x=>x.type+' · '+(x.key||'new')+' ('+(x.questions||[]).length+' q)'},
+projects:{t:'📁 Projects',l:'projects',mk:()=>({id:'',skills:[],checks:[]}),ti:x=>x.title||x.id||'New project',sw:'hidden'},
+materials:{t:'📎 Additional materials',l:'materials',sp:'files',mk:()=>({id:'',label:''}),ti:x=>x.label||x.id||'New file'},
+practice:{t:'🧪 Practice files',l:'practice',sp:'files',mk:()=>({id:'',label:''}),ti:x=>x.label||x.id||'New file'},
+profile:{t:'🏅 Badges & profile',f:()=>[[D.profile,[['side','Profile side','s',['left','right']],['accents','Accent colours (comma separated)','csv'],['badges','The 5 badges','sub',[['name','Name'],['color','Colour','c'],['progress','Lessons finished %','n'],['result','Score %','n'],['visits','Days visited','n']],b=>b.name||'Badge',()=>({name:'',color:'#2f6fed',progress:0,result:0,visits:1})]]]]},
+access:{t:'🔐 Login & sign-out',f:()=>[[D.session,[['idleMinutes','Auto sign-out after (minutes idle)','n'],['warnMinutes','Warn this many minutes before','n']]],[D.login,[['brandLine','Login screen top line'],['notes','Notes under the login button — one per line','lines']]]]},
+source:{t:'🛠 Source editor'},publish:{t:'⬆ Connect & publish'}};
+/* ===== codecs ===== */
+const enc={csv:v=>(v||[]).join(', '),lines:v=>(v||[]).join('\n'),pairs:(v,k)=>(v||[]).map(o=>k.map(x=>o[x]??'').join(' | ')).join('\n'),map:v=>Object.entries(v||{}).map(([a,b])=>a+' = '+b).join('\n')};
+const dec={csv:t=>t.split(',').map(s=>s.trim()).filter(Boolean),lines:t=>t.split('\n').map(s=>s.trim()).filter(Boolean),
+pairs:(t,k)=>t.split('\n').filter(l=>l.trim()).map(l=>{const p=l.split('|').map(s=>s.trim()),o={};k.forEach((x,i)=>o[x]=i==k.length-1?p.slice(i).join(' | '):(p[i]||''));return o}),
+map:t=>Object.fromEntries(t.split('\n').filter(l=>l.includes('=')).map(l=>{const i=l.indexOf('=');return[l.slice(0,i).trim(),l.slice(i+1).trim()]}))};
+/* ===== generic renderer ===== */
+function form(root,o,spec){spec.forEach(f=>{const[k,l,t,x,ti,mk]=f;
+ if(t=='b'){const w=E('label',{className:'chk'});const c=E('input',{type:'checkbox',checked:o[k]!==false&&!!o[k]});c.onchange=()=>{o[k]=c.checked;mark()};w.append(c,l);root.append(w);return}
+ root.append(E('label',{},esc(l)));
+ if(t=='sub'){o[k]=o[k]||[];list(root,o[k],x,ti,mk,1);return}
+ let c;
+ if(t=='a'||enc[t]){c=E('textarea');c.value=enc[t]?enc[t](o[k],x):(o[k]??'')}
+ else if(t=='s'){c=E('select',{},x.map(v=>`<option>${v}</option>`).join(''));c.value=o[k]||x[0]}
+ else{c=E('input',{type:t=='n'?'number':t=='c'?'color':'text'});c.value=o[k]??(t=='c'?'#2f6fed':'')}
+ c.oninput=c.onchange=()=>{o[k]=enc[t]?dec[t](c.value,x):t=='n'?(c.value===''?'':Number(c.value)):c.value;mark()};
+ root.append(c)})}
+function list(root,arr,spec,ti,mk,nested,sw){
+ const box=E('div');root.append(box);
+ const draw=()=>{box.innerHTML='';arr.forEach((it,i)=>{
+  const d=E('details'),s=E('summary'),sp=E('span');sp.textContent=ti(it,i);s.append(sp);
+  const btn=(txt,fn,cls='')=>{const b=E('button',{className:'b mini '+cls,textContent:txt,title:txt});b.onclick=e=>{e.preventDefault();e.stopPropagation();fn()};s.append(b)};
+  btn('↑',()=>{if(i){[arr[i-1],arr[i]]=[arr[i],arr[i-1]];mark();draw()}});btn('↓',()=>{if(i<arr.length-1){[arr[i+1],arr[i]]=[arr[i],arr[i+1]];mark();draw()}});
+  btn('⧉',()=>{arr.splice(i+1,0,JSON.parse(JSON.stringify(it)));mark();draw()});btn('✕',()=>{if(confirm('Delete this item?')){arr.splice(i,1);mark();draw()}},'d');
+  const inn=E('div',{className:'in'});form(inn,it,spec);d.append(s,inn);d.ontoggle=()=>{};box.append(d);
+  const t=()=>{sp.textContent=ti(it,i)};inn.addEventListener('input',t);inn.addEventListener('change',t)});
+  if(!arr.length)box.append(E('p',{className:'hint'},'Nothing here yet.'))};
+ draw();const a=E('button',{className:'b',textContent:'＋ Add'});a.onclick=()=>{arr.push(mk());mark();draw();box.lastChild.open=true};root.append(a);return draw}
+/* ===== views ===== */
+function go(k){cur=k;$('#ttl').textContent=SECT[k].t.replace(/^\S+\s/,'');document.querySelectorAll('nav button[data-k]').forEach(b=>b.classList.toggle('on',b.dataset.k==k));
+ const v=$('#view');v.innerHTML='';const S=SECT[k];
+ if(!src&&k!='publish'){v.append(E('div',{className:'card'},'<b>Connect first.</b> Open <i>Connect & publish</i> and load your index.html from GitHub (or upload it).'));return}
+ if(k=='source')return srcView(v);if(k=='publish')return pubView(v);
+ if(S.f){S.f().forEach(([o,sp])=>{const c=E('div',{className:'card'});form(c,o,sp);v.append(c)});return}
+ const top=E('div',{className:'card'});v.append(top);
+ top.append(E('p',{className:'hint'},{weeks:'Weeks here are layered over the built-in course. Same week number = replaced. Use “Import built-in week” to start from what is on the site now.',items:'Same Drive ID as a built-in recording = renamed/updated. Untick “Released” to hide it from students.',notes:'Same note id as a built-in note replaces it; use Hide to remove it from students.',quizzes:'Reading quiz key = note id (readme-week6). Video quiz key = screencast id.'}[k]||''));
+ if(S.imp){const b=E('button',{className:'b',textContent:'⤓ '+S.a});b.onclick=()=>impWeek(()=>go(k));top.append(b)}
+ list(top,D[S.l],SPEC[S.sp||S.l],S.ti,S.mk)}
+function impWeek(done){const n=prompt('Import which built-in week number (1–16)?');if(!n)return;
+ const doc=new DOMParser().parseFromString(src,'text/html'),c=doc.getElementById('week'+n);if(!c)return alert('Week '+n+' not found in index.html');
+ const days=[...c.querySelectorAll('.flip-card')].map(f=>{const bk=f.querySelector('.flip-card-back'),t=f.classList.contains('project-day')?'project':f.classList.contains('practice-day')?'practice':'lesson';
+  const links=[...f.querySelectorAll('.ll[onclick]')].map(b=>{const m=/(hmOpenScreencast|hmOpenReadMe|hmOpenProject)\('([^']+)'\)/.exec(b.getAttribute('onclick'));return m?{kind:{hmOpenScreencast:'screencast',hmOpenReadMe:'note',hmOpenProject:'project'}[m[1]],ref:m[2],label:''}:null}).filter(Boolean);
+  return{type:t,title:f.querySelector('h4')?.textContent.trim()||'',front:f.querySelector('.flip-card-front p')?.textContent.trim()||'',idea:(bk.querySelector('.big-ideas')?.textContent||'').trim(),
+   vocab:[...bk.querySelectorAll('.vocab')].map(s=>({term:s.textContent.trim(),def:s.dataset.def||''})),links}});
+ D.weeks=D.weeks.filter(w=>String(w.n)!=n);D.weeks.push({n:Number(n),title:c.querySelector('h2.wk')?.textContent.trim(),short:'',days});D.weeks.sort((a,b)=>a.n-b.n);mark();done()}
+/* ===== source editor ===== */
+function ranges(){const out=[],re=/<(div|section|article)\b[^>]*\bid="([^"]+)"[^>]*>/g;let m;while(m=re.exec(src)){if(/week-card|note-section|class="view|home-workflow|capture-warning/.test(m[0])||/^(home|curriculum|projects|notes|screencasts|practice|materials|assessment|phase-assessment|progress)$/.test(m[2]))out.push(m[2])}
+ const re2=/<script id="([^"]+)">/g;while(m=re2.exec(src))if(m[1].length<40)out.push('script:'+m[1]);return out}
+function span(id){let s,e;if(id.startsWith('script:')){s=src.indexOf('<script id="'+id.slice(7)+'">');e=src.indexOf('<\/script>',s)+9;return s<0?null:[s,e]}
+ const m=new RegExp('<(div|section|article)\\b[^>]*\\bid="'+id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'"[^>]*>').exec(src);if(!m)return null;
+ const tag=m[1],re=new RegExp('<(/?)'+tag+'\\b[^>]*>','g');re.lastIndex=m.index;let d=0,x;while(x=re.exec(src)){d+=x[1]?-1:1;if(!d)return[m.index,re.lastIndex]}return null}
+function srcView(v){const ids=ranges(),c=E('div',{className:'card'});
+ c.innerHTML=`<p class="hint">Edit the real HTML of any section of index.html: a page (home, curriculum…), a week card, a Read Me note, or a script block. Changes are written into the file and show on the site after you publish.</p><label>Choose a part of the page</label><select id="sid">${ids.map(i=>`<option>${esc(i)}</option>`).join('')}</select><label>HTML</label><textarea class="code" id="sta" spellcheck="false"></textarea><div class="row" style="margin-top:10px"><button class="b p" id="sap">Apply to file</button><span class="hint" id="smg"></span></div>`;v.append(c);
+ const sel=$('#sid',c),ta=$('#sta',c),ld=()=>{const r=span(sel.value);ta.value=r?src.slice(r[0],r[1]):'';ta.dataset.r=r?r.join(','):''};sel.onchange=ld;ld();
+ $('#sap',c).onclick=()=>{const r=span(sel.value);if(!r)return;src=src.slice(0,r[0])+ta.value+src.slice(r[1]);mark();$('#smg',c).textContent='Applied ✔ ('+ta.value.length+' chars)'};
+ const f=E('div',{className:'card'});f.innerHTML=`<h3>Find &amp; replace in the whole file</h3><div class="row"><input type="text" id="fa" placeholder="Find"><input type="text" id="fb" placeholder="Replace with"><button class="b" id="fgo" style="flex:none">Replace all</button></div><p class="hint" id="fm"></p>`;v.append(f);
+ $('#fgo',f).onclick=()=>{const a=$('#fa',f).value;if(!a)return;const n=src.split(a).length-1;if(!n)return $('#fm',f).textContent='No matches.';if(!confirm(n+' match(es). Replace all?'))return;src=src.split(a).join($('#fb',f).value);mark();$('#fm',f).textContent=n+' replaced.'}}
+/* ===== load / bake ===== */
+const RE9=/<script id="cc-9-live">[\s\S]*?<\/script>/;
+function runBlock(id,w){const m=new RegExp('<script id="'+id+'">([\\s\\S]*?)<\\/script>').exec(src);if(m)try{new Function('window','var HM_CONTENT=window.HM_CONTENT;'+m[1])(w)}catch(e){}}
+function load(t){src=t;const w={HM_CONTENT:{}};['cc-0-profile','cc-1-curriculum','cc-2-screencasts','cc-3-notes','cc-4-quizzes','cc-5-projects','cc-6-materials','cc-7-site-text','cc-8-session'].forEach(i=>runBlock(i,w));
+ let b={};try{b=JSON.parse(/window\.HM_BAKED\s*=\s*([\s\S]*?);\s*<\/script>/.exec(RE9.exec(src)?.[0]||'')?.[1]||'{}')}catch(e){}
+ const C=w.HM_CONTENT,pick=(k,d)=>JSON.parse(JSON.stringify(b[k]??C[k]??d)),P=w.HM_PROFILE||{},pf=b.profile||{};
+ const sc=pick('screencasts',{}),wk=pick('weeks',{});
+ return{site:Object.assign({stats:[],tabs:{}},pick('site',{})),weeks:Object.entries(wk).map(([n,x])=>({n:Number(n),...x})).sort((a,b)=>a.n-b.n),items:sc.items||[],groups:sc.groups||[],
+ notes:pick('notes',[]),quizzes:pick('quizzes',[]),projects:pick('projects',[]),materials:pick('materials',[]),practice:pick('practice',[]),
+ profile:{side:pf.side||P.side||'left',accents:pf.accents||P.accents||[],badges:JSON.parse(JSON.stringify(pf.badges||P.badges||[]))},
+ session:Object.assign({idleMinutes:60,warnMinutes:2},w.HM_SESSION,b.session),login:Object.assign({notes:[]},w.HM_LOGIN,b.login)}}
+function clean(o){if(Array.isArray(o))return o.map(clean);if(o&&typeof o=='object'){const r={};for(const k in o){if(o[k]===''||o[k]==null||(typeof o[k]=='number'&&isNaN(o[k])))continue;r[k]=clean(o[k])}return r}return o}
+function bake(){const B={},d=clean(D);
+ if(Object.keys(d.site||{}).some(k=>(d.site[k]||[]).length!==0))B.site=d.site;
+ if(d.weeks.length)B.weeks=Object.fromEntries(d.weeks.filter(w=>w.n).map(({n,...r})=>[n,r]));
+ if(d.items.length||d.groups.length)B.screencasts={items:d.items,groups:d.groups};
+ ['notes','quizzes','projects','materials','practice'].forEach(k=>d[k].length&&(B[k]=d[k]));
+ B.profile=d.profile;B.session=d.session;B.login=d.login;
+ let t=src.replace(RE9,()=>'<script id="cc-9-live">\nwindow.HM_BAKED = '+JSON.stringify(B,null,1).replace(/<!\x2d\x2d/g,'\\u003c!--').replace(/<\//g,'<\\/')+';\n<\/script>');
+ return t.replace(/(<meta name="hm-build" content=")[^"]*(")/,(a,x,y)=>x+'studio-'+new Date().toISOString().replace(/\D/g,'').slice(0,12)+y)}
+function check(){const w=[];D.quizzes.forEach(q=>{if((q.questions||[]).length<5)w.push('Quiz “'+q.key+'” has fewer than 5 questions (students will not get it).');(q.questions||[]).forEach((x,i)=>{if((x.options||[]).length<2||x.answer>=(x.options||[]).length)w.push('Quiz “'+q.key+'” question '+(i+1)+': check options / correct number.')})});
+ const dup=(a,k,n)=>{const s=new Set();a.forEach(x=>{if(x[k]&&s.has(x[k]))w.push('Duplicate '+n+' “'+x[k]+'”.');s.add(x[k])})};dup(D.notes,'id','note id');dup(D.projects,'id','project id');dup(D.items,'id','screencast id');
+ D.items.forEach(x=>{if(!x.id)w.push('A screencast has no Drive file ID.')});D.weeks.forEach(x=>{if(!x.n)w.push('A week has no number.')});if(!/<script id="cc-9-live">/.test(src))w.push('This file has no cc-9-live block — edits cannot be saved.');return w}
+/* ===== GitHub ===== */
+const log=(m)=>{const l=$('#lg');if(l)l.textContent+=m+'\n'};
+const api=(p,o={})=>fetch(`https://api.github.com/repos/${LS.o}/${LS.r}/contents/${encodeURI(LS.p||'index.html')}${p}`,{...o,headers:{Accept:'application/vnd.github+json',...(LS.t?{Authorization:'Bearer '+LS.t}:{}),...o.headers}});
+const u8=b=>new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\s/g,'')),c=>c.charCodeAt(0)));
+const b64=t=>{const u=new TextEncoder().encode(t);let s='';for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)};
+async function pull(){log('Loading…');const r=await api('?ref='+encodeURIComponent(LS.b||'main'));if(!r.ok)return log('✖ '+r.status+' '+(await r.text()).slice(0,200));const j=await r.json();sha=j.sha;
+ let t=j.content?u8(j.content):await(await api('?ref='+encodeURIComponent(LS.b||'main'),{headers:{Accept:'application/vnd.github.raw+json'}})).text();
+ D=load(t);mark(false);log('✔ Loaded '+(t.length/1024|0)+' KB from '+LS.o+'/'+LS.r);}
+async function push(){const w=check();if(w.length&&!confirm('Warnings:\n\n'+w.join('\n')+'\n\nPublish anyway?'))return;
+ const out=bake(),msg=$('#cm').value||'Update course content from Course Studio';log('Publishing…');
+ const r=await api('',{method:'PUT',body:JSON.stringify({message:msg,content:b64(out),sha,branch:LS.b||'main'})});const j=await r.json();
+ if(!r.ok)return log('✖ '+r.status+' '+(j.message||'')+(r.status==409?'\nSomeone else changed the file — press “Reload from GitHub” and re-apply.':''));
+ sha=j.content.sha;src=out;mark(false);log('✔ Published. GitHub Pages usually updates in 1–2 minutes; students then refresh automatically.')}
+function pubView(v){const c=E('div',{className:'card'});
+ c.innerHTML=`<h3>GitHub connection</h3><p class="hint">Create a <b>fine-grained token</b> on github.com → Settings → Developer settings, limited to <b>this one repository</b> with <b>Contents: Read and write</b>. It is stored only in this browser.</p>
+ <div class="row"><div><label>Owner / username</label><input type="text" id="go" value="${esc(LS.o||'')}"></div><div><label>Repository</label><input type="text" id="gr" value="${esc(LS.r||'')}"></div><div><label>Branch</label><input type="text" id="gb" value="${esc(LS.b||'main')}"></div><div><label>File path</label><input type="text" id="gp" value="${esc(LS.p||'index.html')}"></div></div>
+ <label>Token</label><input type="password" id="gt" value="${esc(LS.t||'')}" placeholder="github_pat_…">
+ <div class="row" style="margin-top:12px"><button class="b p" id="gl">⤓ Load from GitHub</button><label class="b" style="margin:0;text-align:center;cursor:pointer">📂 Open local index.html<input type="file" id="gf" accept=".html" hidden></label><button class="b" id="gd">💾 Download updated file</button></div>`;
+ const p=E('div',{className:'card'});p.innerHTML=`<h3>Publish</h3><label>Commit message</label><input type="text" id="cm" placeholder="Update course content from Course Studio"><div id="ck" class="hint"></div><div class="row" style="margin-top:12px"><button class="b p" id="gp2">⬆ Publish to GitHub</button></div><label>Log</label><div class="log" id="lg"></div>`;v.append(c,p);
+ const save=()=>{LS={o:$('#go').value.trim(),r:$('#gr').value.trim(),b:$('#gb').value.trim()||'main',p:$('#gp').value.trim()||'index.html',t:$('#gt').value.trim()};localStorage.setItem('cs_gh',JSON.stringify(LS))};
+ $('#gl').onclick=async()=>{save();await pull();ck()};$('#gp2').onclick=()=>{if(!src||!LS.t)return log('Load the file and add a token first.');save();push().then(ck)};
+ $('#gf').onchange=async e=>{const f=e.target.files[0];if(f){D=load(await f.text());mark(false);log('✔ Opened local file ('+f.name+'). Use Download to save your edits.');ck()}};
+ $('#gd').onclick=()=>{if(!src)return;const a=E('a',{href:URL.createObjectURL(new Blob([bake()],{type:'text/html'})),download:'index.html'});a.click()};
+ const ck=()=>{if(!src)return;const w=check();$('#ck').innerHTML=w.length?'<span class="warn">⚠ '+w.map(esc).join('<br>⚠ ')+'</span>':'<span class="ok">✔ No problems found.</span>'};ck()}
+/* ===== preview ===== */
+let pvOn=false;function preview(){if(!src)return;const v=$('#view');let f=$('#pv');if(!f){f=E('iframe',{id:'pv'});f.sandbox='allow-scripts allow-popups';v.prepend(f)}
+ const guard='<script>(function(){var f=window.fetch;window.fetch=function(u){if(/script\\.google|googleusercontent|index\\.html|\\?_hm/.test(String(u)))return Promise.reject(0);return f.apply(this,arguments)}})()<\/script>';
+ f.srcdoc=bake().replace(/<head>/,'<head>'+guard)}
+$('#bpv').onclick=()=>{if(!src)return;pvOn=!pvOn;if(pvOn)preview();else $('#pv')?.remove();$('#bpv').textContent=pvOn?'✕ Close preview':'👁 Preview'};
+$('#bpub').onclick=()=>go('publish');
+/* ===== boot ===== */
+const nav=$('#nav');nav.append(E('h1',{},'🎓 Course Studio'));
+Object.keys(SECT).forEach(k=>{if(k=='source')nav.append(E('hr'));const b=E('button',{textContent:SECT[k].t});b.dataset.k=k;b.onclick=()=>{pvOn=false;$('#bpv').textContent='👁 Preview';go(k)};nav.append(b)});
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
+go('publish');if(LS.o&&LS.r&&LS.t)pull().then(()=>go('site'));
+</script></body></html>
